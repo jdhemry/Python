@@ -2,12 +2,25 @@
 
 
 
-## Live Python display of audio data
+### - Live Python display of audio data
 	https://k3no.medium.com/fourier-transform-for-audio-in-python-1840b13426a
 	https://github.com/ricklupton/livefft
 	https://stackoverflow.com/questions/56178261/real-time-fft-plotting-in-python-matplotlib
 	https://gist.github.com/denisb411/cbe1dce9bc01e770fa8718e4f0dc7367
 	
 	
-## PyAudio Error
+### - PyAudio Error
 h	ttps://stackoverflow.com/questions/70344884/pyaudio-write-systemerror-py-ssize-t-clean-macro-must-be-defined-for-format
+
+
+
+
+### - 3D Plotting Matlab
+    https://stackoverflow.com/questions/67101681/make-3d-python-plot-as-beautiful-as-matlab
+    
+### - 2D Plotting Matlab
+    https://stackoverflow.com/questions/7229971/2d-grid-data-visualization-in-python
+    
+    
+## Good Sound Sweep
+   https://www.youtube.com/watch?v=2Qvroo6zK8w
