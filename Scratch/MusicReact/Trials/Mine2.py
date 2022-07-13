@@ -31,6 +31,7 @@ lock = threading.Lock()
 Buckets     = OCTAVES * NOTES
 NoteFreqs   = [0] * Buckets
 NoteIntensities = [0] * Buckets
+EQ = [1] * Buckets
 beatTriggers = [2,4,8,16,32]
 
 # Set frequencies for grid
@@ -63,18 +64,30 @@ controls = [
     [sg.Text('Y Axis:'), sg.Slider(orientation ='horizontal', key='ax1y', range=(50,1000), default_value=1000)],
     [sg.Text('Window:'), sg.Combo(windowOptions, default_value='Blackman', key='fftwindow')],
     [sg.Text('Chunk:'), sg.Slider(orientation ='horizontal', key='chunk', range=(0,8), default_value=2)],
-    [sg.Checkbox('Avg Filter', key='avg_chk', default=True)],
+    [sg.Checkbox('Avg Filter', key='avg_chk', default=False)],
     [sg.HorizontalSeparator()],
     [sg.Text('FFT Data Plot', font=AppFont)],
     [sg.Text('Y Axis:'), sg.Slider(orientation ='horizontal', key='ax2y', range=(10**2,10**4), default_value=3000)],
     [sg.Text('Filter:'), sg.Slider(orientation ='horizontal', key='ax2_filter', range=(0,250), default_value=0)],
+    [sg.HorizontalSeparator()],
+    [sg.Text('Note Plot', font=AppFont)],
+    [sg.Text('Z Axis Max:'), sg.Slider(orientation ='horizontal', key='ax3z', range=(0,50000), default_value=25000)],
+    [sg.Text('Z Axis Max:'), sg.Slider(orientation ='horizontal', key='ax4z', range=(0,50000), default_value=0)],
+    [sg.HorizontalSeparator()],
+    [sg.Text('Equalizer', font=AppFont)],
+    [sg.Checkbox('EQ On:', key='eq_on', default=True)],
+    [sg.Slider(orientation ='vertical', key='eq1', range=(-100,100), default_value=-40),
+    sg.Slider(orientation ='vertical', key='eq2', range=(-100,100), default_value=-20),
+    sg.Slider(orientation ='vertical', key='eq3', range=(-100,100), default_value=-10),
+    sg.Slider(orientation ='vertical', key='eq4', range=(-100,100), default_value=0),
+    sg.Slider(orientation ='vertical', key='eq5', range=(-100,100), default_value=0),
+    sg.Slider(orientation ='vertical', key='eq6', range=(-100,100), default_value=10),
+    sg.Slider(orientation ='vertical', key='eq7', range=(-100,100), default_value=20)],
 ]
 
 status = [
     [sg.Text('Window: ', justification='left'), sg.Text('X', key='a1')],
-    [sg.Text('Chunk Size: ', justification='left'), sg.Text('X', key='a2')],
     [sg.Text('Time: ', justification='left'), sg.Text('X', key='a3')],
-    [sg.Text('Beat: ', justification='left'), sg.Text('X', key='a4')],
 ]
 
 screen_layout = [
@@ -88,17 +101,15 @@ screen_layout = [
 ]
 
 _VARS['window'] = sg.Window('Sound transformations', screen_layout, finalize=True)
+_VARS['window']['eq1'].bind('<ButtonRelease-1>', 'R')
+_VARS['window']['eq2'].bind('<ButtonRelease-1>', 'R')
+_VARS['window']['eq3'].bind('<ButtonRelease-1>', 'R')
+_VARS['window']['eq4'].bind('<ButtonRelease-1>', 'R')
+_VARS['window']['eq5'].bind('<ButtonRelease-1>', 'R')
+_VARS['window']['eq6'].bind('<ButtonRelease-1>', 'R')
+_VARS['window']['eq7'].bind('<ButtonRelease-1>', 'R')
 
-# TODO ability to change A1 -> NoteFreqs... on the fly
-# TODO FFT windowing / eq... from Arduino example?
-# TODO controls for (octaves, A1, ...)
-# TODO Circular buffer to query diff bands? at differing speeds, grab smaller chunks for high, and longer for low
-# TODO Save variables to singular storage
-# TODO Clean up py file organization
 
-# TODO Test diff microphones
-
-# TODO Switch to input card? or audio stream?
 
 def stop():
     _VARS['listening'] = False;
@@ -133,27 +144,33 @@ def render(size):
      8 : 2048*2 -  - calcs for oct 3,4,5,6,7
     16 : 4096*2 -  - calcs for oct 2,3,4,5,6,7
     32 : 8192*2 -  - calcs for oct 1,2,3,4,5,6,7
+    
+     2 :  512*2 -  - calcs for oct 5,6,7
+     4 : 1024*2 -  - calcs for oct 4,5,6
+     8 : 2048*2 -  - calcs for oct 3,4,5
+    16 : 4096*2 -  - calcs for oct 2,3,4
+    32 : 8192*2 -  - calcs for oct 1,2,3
     '''
     setSize = chunk * size
     grab = _VARS['buffer'][(chunk * beats) - setSize:]
     if (len(grab) != setSize):
         return
-    #print(f'yep: grab={len(grab)}, size={size}, setSize={setSize}')
         
-    # TODO avg filter using on fly created array
+    # Note this doesn't show on the display as only used in figuring Notes
     wind = grab * getWindowing(values['fftwindow'], setSize)
     
     # TODO Might be a way to calc this...
     cutOctaves = 4 if size == 2 else 3 if size == 4 else 2 if size == 8 else 1 if size == 16 else 0
-    #blah = (cutOctaves * NOTES) + 1
-    # print(f'minFreq: blah={blah}, cutOctaves={cutOctaves}')
-    minFreq = NoteFreqs[(cutOctaves*NOTES)+1]
-
+    minFreq = NoteFreqs[cutOctaves * NOTES]
+    cutOctaves = 4 - cutOctaves # TODO again this smells, but wait to fuss with calcs
+    maxFreq = NoteFreqs[((OCTAVES - cutOctaves) * NOTES) - 1]
+    #print(f'size: {size} / minFreq: {minFreq} / maxFreq: {maxFreq}')
+    
     # get freq data
     fftData = np.abs(np.fft.rfft(wind))
     fftFreq = np.fft.rfftfreq(setSize, 1./RATE)
     
-    noteInt = setNoteBuckets(fftData, fftFreq, minFreq)
+    noteInt = setNoteBuckets(fftData, fftFreq, minFreq, maxFreq)
     
     # Lock before the setting of the data
     lock.acquire()
@@ -163,16 +180,13 @@ def render(size):
     
     lock.release()
 
-def setNoteBuckets(fftData, fftFreq, minFreq=0):
+def setNoteBuckets(fftData, fftFreq, minFreq=0, maxFreq=20000):
     noteInt = NoteIntensities[:]
     # Limit the upper/lower ranges to loop through
     for i in range(fftData.size):
-        if (fftFreq[i] > minFreq):
+        if (fftFreq[i] > minFreq and fftFreq[i] < maxFreq):
             noteInt[find_bucket_index(NoteFreqs, fftFreq[i])] = fftData[i]
     return noteInt
-
-def getDataSize():
-    return int(64 * chunk)
 
 def pause():
     # leave buffer full, but stop the stream
@@ -205,25 +219,46 @@ def drawFig(canvas, figure):
 def updateUI():
     if (_VARS['listening'] == True):
         
-        _VARS['window']['a4'].update(_VARS['beat'])
-
         # ==================== Graphing =================
         # plot sound data
         ax1.cla()
         ax1.grid()
         ax1.axis([0, chunk * 4, -int(values['ax1y']), int(values['ax1y'])])
         ax1.plot(_VARS['buffer'][maxBuffer - (chunk * 4):])
-
+        ax1.title.set_text('Sound Data')
+        
         # plot Note data
+        ax2.cla()
+        ax2.imshow(np.array(NoteIntensities).reshape(OCTAVES,NOTES), 
+            vmin=values['ax4z'], vmax=values['ax3z'], interpolation="nearest", origin="upper")
+        ax2.title.set_text('Raw Note Intensity')
+        
+        equalized = np.array(NoteIntensities) * np.array(EQ)
+        
         ax3.cla()
-        ax3.imshow(np.array(NoteIntensities).reshape(OCTAVES,NOTES), interpolation="nearest", origin="upper")
+        ax3.imshow(np.array(equalized).reshape(OCTAVES,NOTES), 
+            vmin=values['ax4z'], vmax=values['ax3z'], interpolation="nearest", origin="upper")
 
 def find_bucket_index(array, value):
     array = np.asarray(array)
     idx = (np.abs(array - value)).argmin()
     return idx if array[idx] < value else idx - 1
-   
-def getWindowing(key, size=getDataSize()):
+    
+def createEqualizer():
+    global EQ
+    
+    # TODO calcs for smoother curves
+    # Right no just straight lines per band
+    for i in range(OCTAVES): 
+        eqX = getEqValue(values['eq' + str(i+1)])
+        start = i * 12
+        for j in range(NOTES):
+            EQ[start + j] = eqX
+    
+def getEqValue(band):
+    return band if (band > 0) else 0 if (band == 0) else 1/abs(band)
+    
+def getWindowing(key, size):
     if (key == "Bartlett"):
         return np.bartlett(size)
     elif (key == "Blackman"):
@@ -239,7 +274,6 @@ def getWindowing(key, size=getDataSize()):
 
 def show_status():
     _VARS['window']['a1'].update(values['fftwindow'])
-    _VARS['window']['a2'].update(getDataSize())
 
 def save():
     filename =  sg.PopupGetFile('Enter File Name:', save_as=True)
@@ -256,20 +290,24 @@ def load():
         # TODO also need to set a bunch of stuff here? disables and such
         
 def display():
-    print(NoteIntensities)
+    for i in range(len(NoteFreqs)):
+        print(f'{NoteFreqs[i]} Hz : {NoteIntensities[i]}')
 
 # INIT:
+
 plt.ion()
-fig = plt.figure(figsize=(5,8))
+fig = plt.figure(figsize=(5,10))
+fig.tight_layout(pad=0.4, h_pad=4, w_pad=4)
 ax1 = fig.add_subplot(311)
-#ax2 = fig.add_subplot(312)
+ax2 = fig.add_subplot(312)
 ax3 = fig.add_subplot(313)
+#ax4 = fig.add_subplot(314)
 drawFig(_VARS['window']['fig_cv'].TKCanvas, fig)
 
 # MAIN LOOP
 while True:
     event, values = _VARS['window'].read(timeout=10)
-    #print(event, values)
+    #if event != '__TIMEOUT__': print(event, values)
     if event == sg.WIN_CLOSED or event == 'exit':
         stop()
         pAud.terminate()
@@ -283,7 +321,10 @@ while True:
     if event == 'save':
         save()
     if event == 'listen':
+        createEqualizer()
         listen()
+    if event in ['eq1R','eq2R','eq3R','eq4R','eq5R','eq6R','eq7R']:
+        createEqualizer()
     if event == 'stop':
         stop()
     else:

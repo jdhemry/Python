@@ -33,14 +33,31 @@ h	ttps://stackoverflow.com/questions/70344884/pyaudio-write-systemerror-py-ssize
     
 TO DO
 -------
-Display -> freq / value
-Make display relative instead of const changing what colors mean
-Put equalizer in place (poss make band eq controls to control) if it works well (can have saving of control settings for diff music, etc)
-Get timings on diff fft levels (how long between octave refreshes)
-Why are NoteIntensities 0 and 4 always blank right now?
-    - 4 is because of the resolution... need to go higher buffer size to get that resolution
-    - 0 is likely because of how I'm bucketing or finding the right bucket
-Ratchet buffer up a size 16k -> 32k, and perhaps the listening chunk 256 -> 512
-Try also having a maxOctave on the render... so that low level scans don't push agg data into the cell
-    - then can change the window and see what gives the best results
 
+Task - add in new octave
+    1) octaves -> 8
+    2) add eq8
+    3) change A1-> 27
+    4) change calcs...
+
+Task - Test diff microphones
+Task - data from wav file (play while processing)
+Task - Ratchet buffer up a size 16k -> 32k, and perhaps the listening chunk 256 -> 512
+Task - Show Processed (harmonics and such)
+Task - Show colorbar if possible
+Task - EQ Calculations to average between bands
+    - Saving? (can have saving of control settings for diff music, etc)
+    
+    
+# TODO controls for (octaves, A1, ...)
+# TODO Save variables to singular storage
+Task - Clean up py file organization
+
+
+Debug - Get timings on diff fft levels (how long between octave refreshes)
+Debug - Why NoteIntensities 4 always blank right now?
+    - 4 is because of the resolution... need to go higher buffer size to get that resolution
+    
+    
+    
+    
