@@ -8,6 +8,7 @@ import os
 import sys
 import time
 import threading
+import math
 
 # VARS CONSTS:
 _VARS = {'window': False,
@@ -18,12 +19,15 @@ _VARS = {'window': False,
          'beat' : 0
         }
          
-OCTAVES     = 7
+OCTAVES     = 8
 NOTES       = 12
-A1          = 54.
+A1          = 27.
 NoteStep    = 1.05946274243761
 RATE        = 44100  # Equivalent to Human Hearing at 40 kHz
 SaveFolder  = 'saves'
+Chunk       = 512
+Beats       = 64
+fftOcts     = 3
 
 pAud = pyaudio.PyAudio()
 lock = threading.Lock()
@@ -32,7 +36,7 @@ Buckets     = OCTAVES * NOTES
 NoteFreqs   = [0] * Buckets
 NoteIntensities = [0] * Buckets
 EQ = [1] * Buckets
-beatTriggers = [2,4,8,16,32]
+beatTriggers = [1,2,4,8,16,32]
 
 # Set frequencies for grid
 for i in range(Buckets):
@@ -76,13 +80,14 @@ controls = [
     [sg.HorizontalSeparator()],
     [sg.Text('Equalizer', font=AppFont)],
     [sg.Checkbox('EQ On:', key='eq_on', default=True)],
-    [sg.Slider(orientation ='vertical', key='eq1', range=(-100,100), default_value=-40),
-    sg.Slider(orientation ='vertical', key='eq2', range=(-100,100), default_value=-20),
-    sg.Slider(orientation ='vertical', key='eq3', range=(-100,100), default_value=-10),
-    sg.Slider(orientation ='vertical', key='eq4', range=(-100,100), default_value=0),
-    sg.Slider(orientation ='vertical', key='eq5', range=(-100,100), default_value=0),
-    sg.Slider(orientation ='vertical', key='eq6', range=(-100,100), default_value=10),
-    sg.Slider(orientation ='vertical', key='eq7', range=(-100,100), default_value=20)],
+    [sg.Slider(orientation ='vertical', key='eq1', range=(-100,100), default_value=-8),
+    sg.Slider(orientation ='vertical', key='eq2', range=(-100,100), default_value=2),
+    sg.Slider(orientation ='vertical', key='eq3', range=(-100,100), default_value=5),
+    sg.Slider(orientation ='vertical', key='eq4', range=(-100,100), default_value=25),
+    sg.Slider(orientation ='vertical', key='eq5', range=(-100,100), default_value=40),
+    sg.Slider(orientation ='vertical', key='eq6', range=(-100,100), default_value=60),
+    sg.Slider(orientation ='vertical', key='eq7', range=(-100,100), default_value=75),
+    sg.Slider(orientation ='vertical', key='eq8', range=(-100,100), default_value=90)],
 ]
 
 status = [
@@ -108,8 +113,7 @@ _VARS['window']['eq4'].bind('<ButtonRelease-1>', 'R')
 _VARS['window']['eq5'].bind('<ButtonRelease-1>', 'R')
 _VARS['window']['eq6'].bind('<ButtonRelease-1>', 'R')
 _VARS['window']['eq7'].bind('<ButtonRelease-1>', 'R')
-
-
+_VARS['window']['eq8'].bind('<ButtonRelease-1>', 'R')
 
 def stop():
     _VARS['listening'] = False;
@@ -121,56 +125,84 @@ def stop():
         _VARS['stream'].stop_stream()
         _VARS['stream'].close()
 
-maxBuffer = 2**14
-chunk = 256
-beats = 64
-
 def callback(in_data, frame_count, time_info, status):
+    #tic = time.perf_counter()
+
+    # Lock before the setting of the data
+    lock.acquire()
+    
     _VARS['beat'] += 1
-    if (_VARS['beat'] > beats): 
+    if (_VARS['beat'] > Beats): 
         _VARS['beat'] = 1
     _VARS['buffer'].extend(np.frombuffer(in_data, dtype=np.int16))
-    if (len(_VARS['buffer']) > maxBuffer):
-        _VARS['buffer'] = _VARS['buffer'][chunk:]
+    if (len(_VARS['buffer']) > (Chunk * Beats)):
+        _VARS['buffer'] = _VARS['buffer'][Chunk:]
+        
+    lock.release()
+
     if (_VARS['beat'] in beatTriggers): threading.Thread(render(_VARS['beat']), args=(values)).start()
+    
+    #toc = time.perf_counter()
+    #print(f"callback {toc - tic:0.4f} sec")
+    
     return (in_data, pyaudio.paContinue)
 
 def render(size):
     global NoteIntensities
+    
+    #tic = time.perf_counter()
+    
     # depending on size, render different levels
     '''
-     2 :  512*2 -  - calcs for oct 5,6,7
-     4 : 1024*2 -  - calcs for oct 4,5,6,7
-     8 : 2048*2 -  - calcs for oct 3,4,5,6,7
-    16 : 4096*2 -  - calcs for oct 2,3,4,5,6,7
-    32 : 8192*2 -  - calcs for oct 1,2,3,4,5,6,7
-    
-     2 :  512*2 -  - calcs for oct 5,6,7
-     4 : 1024*2 -  - calcs for oct 4,5,6
-     8 : 2048*2 -  - calcs for oct 3,4,5
-    16 : 4096*2 -  - calcs for oct 2,3,4
-    32 : 8192*2 -  - calcs for oct 1,2,3
+     1 : 0    512 - 6,7,8
+     2 : 1   1024 - 5,6,7    
+     4 : 2   2048 - 4,5,6
+     8 : 3   4096 - 3,4,5
+    16 : 4   8192 - 2,3,4
+    32 : 5  16384 - 1,2,3
     '''
-    setSize = chunk * size
-    grab = _VARS['buffer'][(chunk * beats) - setSize:]
+    
+    #toc = time.perf_counter()
+    
+    setSize = Chunk * size
+    grab = _VARS['buffer'][(Chunk * Beats) - setSize:]
     if (len(grab) != setSize):
         return
-        
-    # Note this doesn't show on the display as only used in figuring Notes
-    wind = grab * getWindowing(values['fftwindow'], setSize)
     
-    # TODO Might be a way to calc this...
-    cutOctaves = 4 if size == 2 else 3 if size == 4 else 2 if size == 8 else 1 if size == 16 else 0
-    minFreq = NoteFreqs[cutOctaves * NOTES]
-    cutOctaves = 4 - cutOctaves # TODO again this smells, but wait to fuss with calcs
-    maxFreq = NoteFreqs[((OCTAVES - cutOctaves) * NOTES) - 1]
-    #print(f'size: {size} / minFreq: {minFreq} / maxFreq: {maxFreq}')
+    #print(f"render 1: {time.perf_counter() - toc:0.4f} sec")
+    #toc = time.perf_counter()
+    
+    # Note: this doesn't show on the display as only used in figuring Notes
+    xxx = getWindowing(values['fftwindow'], setSize)
+    
+    #print(f"render 2: {time.perf_counter() - toc:0.4f} sec")
+    #toc = time.perf_counter()
+    
+    wind = grab * xxx
+    #wind = grab * getWindowing(values['fftwindow'], setSize)
+    
+    #print(f"render 3: {time.perf_counter() - toc:0.4f} sec")
+    #toc = time.perf_counter()
+    
+    n = int(math.log(size,2))
+    maxFreq = NoteFreqs[((OCTAVES - n) * NOTES) - 1]
+    minFreq = NoteFreqs[(OCTAVES - n - fftOcts) * NOTES]
+    # print(f'size: {size} / minFreq: {minFreq} / maxFreq: {maxFreq}')
+    
+    #print(f"render 4: {time.perf_counter() - toc:0.4f} sec")
+    #toc = time.perf_counter()
     
     # get freq data
     fftData = np.abs(np.fft.rfft(wind))
     fftFreq = np.fft.rfftfreq(setSize, 1./RATE)
     
+    #print(f"render 5: {time.perf_counter() - toc:0.4f} sec")
+    #toc = time.perf_counter()
+    
     noteInt = setNoteBuckets(fftData, fftFreq, minFreq, maxFreq)
+    
+    #print(f"render 6: {time.perf_counter() - toc:0.4f} sec")
+    #toc = time.perf_counter()
     
     # Lock before the setting of the data
     lock.acquire()
@@ -179,13 +211,19 @@ def render(size):
     NoteIntensities = ((np.array(NoteIntensities) + np.array(noteInt)) / 2).tolist()
     
     lock.release()
-
+    
+    #print(f"render 7: {time.perf_counter() - toc:0.4f} sec")
+    #print(f"render full: size={size} {time.perf_counter() - tic:0.4f} sec")
+    
 def setNoteBuckets(fftData, fftFreq, minFreq=0, maxFreq=20000):
     noteInt = NoteIntensities[:]
     # Limit the upper/lower ranges to loop through
-    for i in range(fftData.size):
-        if (fftFreq[i] > minFreq and fftFreq[i] < maxFreq):
-            noteInt[find_bucket_index(NoteFreqs, fftFreq[i])] = fftData[i]
+    minIdx = find_bucket_index(fftFreq, minFreq)
+    maxIdx = find_bucket_index(fftFreq, maxFreq)
+    for i in range(maxIdx - minIdx):
+    #for i in range(fftData.size):
+        if (fftFreq[minIdx + i] > minFreq and fftFreq[minIdx + i] < maxFreq):
+            noteInt[find_bucket_index(NoteFreqs, fftFreq[minIdx + i])] = fftData[minIdx + i]
     return noteInt
 
 def pause():
@@ -205,7 +243,7 @@ def listen():
     _VARS['window']['listen'].Update(disabled=True)
     _VARS['window']['chunk'].Update(disabled=True)
     _VARS['stream'] = pAud.open(format=pyaudio.paInt16, channels=1, rate=RATE, input=True,
-                                frames_per_buffer=chunk, stream_callback=callback)
+                                frames_per_buffer=Chunk, stream_callback=callback)
     _VARS['stream'].start_stream()
     _VARS['listening'] = True;
     show_status()
@@ -218,27 +256,39 @@ def drawFig(canvas, figure):
     
 def updateUI():
     if (_VARS['listening'] == True):
+        #toc = time.perf_counter()
         
         # ==================== Graphing =================
         # plot sound data
         ax1.cla()
         ax1.grid()
-        ax1.axis([0, chunk * 4, -int(values['ax1y']), int(values['ax1y'])])
-        ax1.plot(_VARS['buffer'][maxBuffer - (chunk * 4):])
+        ax1.axis([0, Chunk * 2, -int(values['ax1y']), int(values['ax1y'])])
+        ax1.plot(_VARS['buffer'][(Chunk * Beats) - (Chunk * 2):])
         ax1.title.set_text('Sound Data')
         
+        #print(f"update 1: {time.perf_counter() - toc:0.4f} sec")
+        
+        #toc = time.perf_counter()
+    
         # plot Note data
         ax2.cla()
-        ax2.imshow(np.array(NoteIntensities).reshape(OCTAVES,NOTES), 
+        ax2.imshow(np.array(NoteIntensities).astype('int').reshape(OCTAVES,NOTES), 
             vmin=values['ax4z'], vmax=values['ax3z'], interpolation="nearest", origin="upper")
         ax2.title.set_text('Raw Note Intensity')
         
-        equalized = np.array(NoteIntensities) * np.array(EQ)
+        #print(f"update 2: {time.perf_counter() - toc:0.4f} sec")
+        
+        #toc = time.perf_counter()
+    
+        equalized = (np.array(NoteIntensities) * np.array(EQ))
         
         ax3.cla()
-        ax3.imshow(np.array(equalized).reshape(OCTAVES,NOTES), 
+        ax3.imshow(np.array(equalized).astype('int').reshape(OCTAVES,NOTES), 
             vmin=values['ax4z'], vmax=values['ax3z'], interpolation="nearest", origin="upper")
 
+        #print(f"update 3: {time.perf_counter() - toc:0.4f} sec")
+        
+    
 def find_bucket_index(array, value):
     array = np.asarray(array)
     idx = (np.abs(array - value)).argmin()

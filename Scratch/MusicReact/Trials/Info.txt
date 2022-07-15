@@ -33,31 +33,25 @@ h	ttps://stackoverflow.com/questions/70344884/pyaudio-write-systemerror-py-ssize
     
 TO DO
 -------
-
-Task - add in new octave
-    1) octaves -> 8
-    2) add eq8
-    3) change A1-> 27
-    4) change calcs...
-
-Task - Test diff microphones
+Task - find quicker draw/plot method
 Task - data from wav file (play while processing)
-Task - Ratchet buffer up a size 16k -> 32k, and perhaps the listening chunk 256 -> 512
-Task - Show Processed (harmonics and such)
-Task - Show colorbar if possible
+--
+
 Task - EQ Calculations to average between bands
     - Saving? (can have saving of control settings for diff music, etc)
-    
+Task - Test diff microphones
+
+Task - Show Processed (harmonics and such)
+Task - Show colorbar if possible
+
     
 # TODO controls for (octaves, A1, ...)
 # TODO Save variables to singular storage
 Task - Clean up py file organization
 
 
-Debug - Get timings on diff fft levels (how long between octave refreshes)
-Debug - Why NoteIntensities 4 always blank right now?
-    - 4 is because of the resolution... need to go higher buffer size to get that resolution
+
     
-    
+   
     
     
