@@ -9,6 +9,7 @@ import sys
 import time
 import threading
 import math
+import pygame
 
 # VARS CONSTS:
 _VARS = {'window': False,
@@ -95,10 +96,13 @@ status = [
     [sg.Text('Time: ', justification='left'), sg.Text('X', key='a3')],
 ]
 
+stretch = 20
+
 screen_layout = [
     [
     buttons,
-    sg.Column(layout=[[sg.Canvas(key='fig_cv',size=(500, 700))]], background_color='#DAE0E6', pad=(0, 0)),
+    #sg.Column(layout=[[sg.Canvas(key='fig_cv',size=(500, 700))]], background_color='#DAE0E6', pad=(0, 0)),
+    sg.Graph((NOTES * stretch, OCTAVES * stretch), (0,0), (NOTES * stretch, OCTAVES * stretch), background_color='lightblue', key='-GRAPH-'),
     sg.VSeperator(),
     sg.Column(controls, vertical_alignment='top'),
     sg.Column(status, vertical_alignment='top')
@@ -254,6 +258,10 @@ def drawFig(canvas, figure):
     figure_canvas_agg.get_tk_widget().pack(side='top', fill='both', expand=1)
     return figure_canvas_agg
     
+def updateUI2():
+    #pygame.draw.rect((255,0,0), pygame.Rect(30,30,60,60), 2)
+    return
+    
 def updateUI():
     if (_VARS['listening'] == True):
         #toc = time.perf_counter()
@@ -261,20 +269,20 @@ def updateUI():
         # ==================== Graphing =================
         # plot sound data
         ax1.cla()
-        #ax1.grid()
+        ax1.grid()
         ax1.axis([0, Chunk * 2, -int(values['ax1y']), int(values['ax1y'])])
         ax1.plot(_VARS['buffer'][(Chunk * Beats) - (Chunk * 2):])
-        #ax1.title.set_text('Sound Data')
+        ax1.title.set_text('Sound Data')
         
         #print(f"update 1: {time.perf_counter() - toc:0.4f} sec")
         
         #toc = time.perf_counter()
         
         # plot Note data
-        #ax2.cla()
+        ax2.cla()
         ax2.imshow(np.array(NoteIntensities).astype('int').reshape(OCTAVES,NOTES), 
             vmin=values['ax4z'], vmax=values['ax3z'], interpolation="nearest", origin="upper")
-        #ax2.title.set_text('Raw Note Intensity')
+        ax2.title.set_text('Raw Note Intensity')
         
         #print(f"update 2: {time.perf_counter() - toc:0.4f} sec")
         
@@ -282,11 +290,11 @@ def updateUI():
     
         equalized = (np.array(NoteIntensities) * np.array(EQ))
         
-        #ax3.cla()
-        #ax3.contourf(np.array(equalized).astype('int').reshape(OCTAVES,NOTES))
+        ax3.cla()
+        ax3.contourf(np.array(equalized).astype('int').reshape(OCTAVES,NOTES))
         #ax3.plot(np.array(equalized).astype('int').reshape(OCTAVES,NOTES))
-        ax3.imshow(np.array(equalized).astype('int').reshape(OCTAVES,NOTES), 
-            vmin=values['ax4z'], vmax=values['ax3z'], interpolation="nearest", origin="upper")
+        #ax3.imshow(np.array(equalized).astype('int').reshape(OCTAVES,NOTES), 
+        #    vmin=values['ax4z'], vmax=values['ax3z'], interpolation="nearest", origin="upper")
 
         #print(f"update 3: {time.perf_counter() - toc:0.4f} sec")
         
@@ -346,7 +354,21 @@ def display():
         print(f'{NoteFreqs[i]} Hz : {NoteIntensities[i]}')
 
 # INIT:
+embed = _VARS['window']['-GRAPH-'].TKCanvas
+os.environ['SDL_WINDOWID'] = str(embed.winfo_id())
 
+#screen = pygame.display.set_mode((100,100))
+#screen.fill(pygame.Color(255, 255, 255))
+
+#pygame.display.init()
+
+# TODO Working on using pygame to plot
+# https://github.com/PySimpleGUI/PySimpleGUI/blob/master/DemoPrograms/Demo_PyGame_Integration.py
+
+# TODO OR... directly use the sg.graph
+https://www.pysimplegui.org/en/latest/call%20reference/#graph-element
+
+'''
 plt.ion()
 fig = plt.figure(figsize=(5,10))
 fig.tight_layout(pad=0.4, h_pad=4, w_pad=4)
@@ -355,7 +377,7 @@ ax2 = fig.add_subplot(312)
 ax3 = fig.add_subplot(313)
 #ax4 = fig.add_subplot(314)
 drawFig(_VARS['window']['fig_cv'].TKCanvas, fig)
-
+'''
 # MAIN LOOP
 while True:
     event, values = _VARS['window'].read(timeout=10)
@@ -380,7 +402,7 @@ while True:
     if event == 'stop':
         stop()
     else:
-        updateUI()
+        updateUI2()
 
 _VARS['window'].close()
 
